@@ -14,7 +14,8 @@
 #include <vector>
 
 #include "Common/CommonTypes.h"
-#include "VideoCommon/VideoCommon.h"
+
+enum class APIType;
 
 // Log in two categories, and save three other options in the same byte
 #define CONF_LOG 1
@@ -39,7 +40,7 @@ enum class StereoMode : int
   TAB,
   Anaglyph,
   QuadBuffer,
-  Nvidia3DVision
+  Passive
 };
 
 enum class ShaderCompilationMode : int
@@ -219,6 +220,8 @@ struct VideoConfig final
     bool bSupportsBackgroundCompiling;
     bool bSupportsLargePoints;
     bool bSupportsPartialDepthCopies;
+    bool bSupportsShaderBinaries;
+    bool bSupportsPipelineCacheData;
   } backend_info;
 
   // Utility

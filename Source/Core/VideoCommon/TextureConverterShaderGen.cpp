@@ -2,13 +2,11 @@
 // Licensed under GPLv2+
 // Refer to the license.txt file included.
 
-#include <array>
-#include <cstring>
+#include "VideoCommon/TextureConverterShaderGen.h"
 
 #include "Common/Assert.h"
 #include "Common/CommonTypes.h"
 #include "VideoCommon/BPMemory.h"
-#include "VideoCommon/TextureConverterShaderGen.h"
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
 
@@ -18,9 +16,8 @@ TCShaderUid GetShaderUid(EFBCopyFormat dst_format, bool is_depth_copy, bool is_i
                          bool scale_by_half, bool copy_filter)
 {
   TCShaderUid out;
-  UidData* uid_data = out.GetUidData<UidData>();
-  memset(uid_data, 0, sizeof(*uid_data));
 
+  UidData* const uid_data = out.GetUidData();
   uid_data->dst_format = dst_format;
   uid_data->efb_has_alpha = bpmem.zcontrol.pixel_format == PEControl::RGBA6_Z24;
   uid_data->is_depth_copy = is_depth_copy;
@@ -67,8 +64,17 @@ ShaderCode GenerateVertexShader(APIType api_type)
   }
   else if (api_type == APIType::OpenGL || api_type == APIType::Vulkan)
   {
-    out.Write("VARYING_LOCATION(0) out float3 v_tex0;\n"
-              "#define id gl_VertexID\n"
+    if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
+    {
+      out.Write("VARYING_LOCATION(0) out VertexData {\n");
+      out.Write("  float3 v_tex0;\n");
+      out.Write("};\n");
+    }
+    else
+    {
+      out.Write("VARYING_LOCATION(0) out float3 v_tex0;\n");
+    }
+    out.Write("#define id gl_VertexID\n"
               "#define opos gl_Position\n"
               "void main() {\n");
   }
@@ -112,8 +118,17 @@ ShaderCode GeneratePixelShader(APIType api_type, const UidData* uid_data)
               "clamp_tb.x, clamp_tb.y), %s));\n"
               "}\n",
               mono_depth ? "0.0" : "uv.z");
-    out.Write("VARYING_LOCATION(0) in vec3 v_tex0;\n"
-              "FRAGMENT_OUTPUT_LOCATION(0) out vec4 ocol0;"
+    if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
+    {
+      out.Write("VARYING_LOCATION(0) in VertexData {\n");
+      out.Write("  float3 v_tex0;\n");
+      out.Write("};\n");
+    }
+    else
+    {
+      out.Write("VARYING_LOCATION(0) in vec3 v_tex0;\n");
+    }
+    out.Write("FRAGMENT_OUTPUT_LOCATION(0) out vec4 ocol0;"
               "void main()\n{\n");
   }
 
@@ -175,7 +190,7 @@ ShaderCode GeneratePixelShader(APIType api_type, const UidData* uid_data)
       break;
 
     case EFBCopyFormat::RGBA8:  // Z24X8
-      out.Write("  ocol0 = float4(texcol.rgb, 0.0);\n");
+      out.Write("  ocol0 = float4(texcol.rgb, 1.0);\n");
       break;
 
     case EFBCopyFormat::G8:  // Z8M

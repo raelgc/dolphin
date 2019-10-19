@@ -13,14 +13,15 @@
 
 #include "Common/Common.h"
 #include "Common/IniFile.h"
+#include "InputCommon/ControlReference/ExpressionParser.h"
 #include "InputCommon/ControllerInterface/Device.h"
 
 class ControllerInterface;
 
-#define sign(x) ((x) ? (x) < 0 ? -1 : 1 : 0)
-
 const char* const named_directions[] = {_trans("Up"), _trans("Down"), _trans("Left"),
                                         _trans("Right")};
+
+class ControlReference;
 
 namespace ControllerEmu
 {
@@ -30,7 +31,9 @@ class EmulatedController
 {
 public:
   virtual ~EmulatedController();
+
   virtual std::string GetName() const = 0;
+  virtual std::string GetDisplayName() const;
 
   virtual void LoadDefaults(const ControllerInterface& ciface);
 
@@ -43,6 +46,7 @@ public:
   void SetDefaultDevice(ciface::Core::DeviceQualifier devq);
 
   void UpdateReferences(const ControllerInterface& devi);
+  void UpdateSingleControlReference(const ControllerInterface& devi, ControlReference* ref);
 
   // This returns a lock that should be held before calling State() on any control
   // references and GetState(), by extension. This prevents a race condition
@@ -74,6 +78,12 @@ public:
     else
       return T(std::lround((zero_value - neg_1_value) * input_value + zero_value));
   }
+
+protected:
+  // TODO: Wiimote attachment has its own member that isn't being used..
+  ciface::ExpressionParser::ControlEnvironment::VariableContainer m_expression_vars;
+
+  void UpdateReferences(ciface::ExpressionParser::ControlEnvironment& env);
 
 private:
   ciface::Core::DeviceQualifier m_default_device;

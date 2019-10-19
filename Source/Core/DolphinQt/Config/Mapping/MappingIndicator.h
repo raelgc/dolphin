@@ -36,6 +36,21 @@ public:
 protected:
   WiimoteEmu::MotionState m_motion_state{};
 
+  QPen GetBBoxPen() const;
+  QBrush GetBBoxBrush() const;
+  QColor GetRawInputColor() const;
+  QPen GetInputShapePen() const;
+  QColor GetCenterColor() const;
+  QColor GetAdjustedInputColor() const;
+  QColor GetDeadZoneColor() const;
+  QPen GetDeadZonePen() const;
+  QBrush GetDeadZoneBrush() const;
+  QColor GetTextColor() const;
+  QColor GetAltTextColor() const;
+  QColor GetGateColor() const;
+
+  double GetScale() const;
+
 private:
   void DrawCursor(ControllerEmu::Cursor& cursor);
   void DrawReshapableInput(ControllerEmu::ReshapableInput& stick);
@@ -76,6 +91,8 @@ public:
 
   double GetCalibrationRadiusAtAngle(double angle) const;
 
+  Common::DVec2 GetCenter() const;
+
   bool IsCalibrating() const;
 
 private:
@@ -87,4 +104,7 @@ private:
   QAction* m_completion_action;
   ControllerEmu::ReshapableInput::CalibrationData m_calibration_data;
   QTimer* m_informative_timer;
+
+  bool m_is_centering = false;
+  Common::DVec2 m_new_center;
 };

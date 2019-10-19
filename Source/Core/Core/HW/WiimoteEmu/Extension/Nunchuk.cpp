@@ -4,6 +4,7 @@
 
 #include "Core/HW/WiimoteEmu/Extension/Nunchuk.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstring>
@@ -31,7 +32,7 @@ constexpr std::array<u8, 2> nunchuk_button_bitmasks{{
     Nunchuk::BUTTON_Z,
 }};
 
-Nunchuk::Nunchuk() : EncryptedExtension(_trans("Nunchuk"))
+Nunchuk::Nunchuk() : Extension1stParty(_trans("Nunchuk"))
 {
   // buttons
   groups.emplace_back(m_buttons = new ControllerEmu::Buttons(_trans("Buttons")));
@@ -91,8 +92,7 @@ void Nunchuk::Update()
   EmulateTilt(&m_tilt_state, m_tilt, 1.f / ::Wiimote::UPDATE_FREQ);
   EmulateShake(&m_shake_state, m_shake, 1.f / ::Wiimote::UPDATE_FREQ);
 
-  const auto transformation =
-      GetRotationalMatrix(-m_tilt_state.angle) * GetRotationalMatrix(-m_swing_state.angle);
+  const auto transformation = GetRotationalMatrix(-m_tilt_state.angle - m_swing_state.angle);
 
   Common::Vec3 accel = transformation * (m_swing_state.acceleration +
                                          Common::Vec3(0, 0, float(GRAVITY_ACCELERATION)));
@@ -122,7 +122,8 @@ bool Nunchuk::IsButtonPressed() const
 
 void Nunchuk::Reset()
 {
-  m_reg = {};
+  EncryptedExtension::Reset();
+
   m_reg.identifier = nunchuk_id;
 
   m_swing_state = {};

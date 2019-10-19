@@ -14,9 +14,7 @@
 #pragma comment(lib, "Dinput8.lib")
 #pragma comment(lib, "dxguid.lib")
 
-namespace ciface
-{
-namespace DInput
+namespace ciface::DInput
 {
 BOOL CALLBACK DIEnumDeviceObjectsCallback(LPCDIDEVICEOBJECTINSTANCE lpddoi, LPVOID pvRef)
 {
@@ -64,10 +62,9 @@ void PopulateDevices(HWND hwnd)
     return;
   }
 
-  InitKeyboardMouse(idi8);
+  InitKeyboardMouse(idi8, hwnd);
   InitJoystick(idi8, hwnd);
 
   idi8->Release();
 }
-}  // namespace DInput
-}  // namespace ciface
+}  // namespace ciface::DInput

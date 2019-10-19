@@ -64,6 +64,7 @@ void NetPlayBrowser::CreateWidgets()
 
   m_table_widget->setSelectionBehavior(QAbstractItemView::SelectRows);
   m_table_widget->setSelectionMode(QAbstractItemView::SingleSelection);
+  m_table_widget->setWordWrap(false);
 
   m_region_combo = new QComboBox;
 
@@ -127,7 +128,7 @@ void NetPlayBrowser::ConnectWidgets()
 
   connect(m_button_box, &QDialogButtonBox::accepted, this, &NetPlayBrowser::accept);
   connect(m_button_box, &QDialogButtonBox::rejected, this, &NetPlayBrowser::reject);
-  connect(m_button_refresh, &QPushButton::pressed, this, &NetPlayBrowser::Refresh);
+  connect(m_button_refresh, &QPushButton::clicked, this, &NetPlayBrowser::Refresh);
 
   connect(m_radio_all, &QRadioButton::toggled, this, &NetPlayBrowser::Refresh);
   connect(m_radio_private, &QRadioButton::toggled, this, &NetPlayBrowser::Refresh);
@@ -135,8 +136,10 @@ void NetPlayBrowser::ConnectWidgets()
 
   connect(m_edit_name, &QLineEdit::textChanged, this, &NetPlayBrowser::Refresh);
   connect(m_edit_game_id, &QLineEdit::textChanged, this, &NetPlayBrowser::Refresh);
+
   connect(m_table_widget, &QTableWidget::itemSelectionChanged, this,
           &NetPlayBrowser::OnSelectionChanged);
+  connect(m_table_widget, &QTableWidget::itemDoubleClicked, this, &NetPlayBrowser::accept);
 }
 
 void NetPlayBrowser::Refresh()
@@ -265,6 +268,9 @@ void NetPlayBrowser::OnSelectionChanged()
 
 void NetPlayBrowser::accept()
 {
+  if (m_table_widget->selectedItems().isEmpty())
+    return;
+
   const int index = m_table_widget->selectedItems()[0]->row();
 
   NetPlaySession& session = m_sessions[index];

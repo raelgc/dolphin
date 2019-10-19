@@ -17,6 +17,7 @@
 #include "Common/CommonPaths.h"
 #include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
+#include "Common/IniFile.h"
 #include "Common/Logging/LogManager.h"
 #include "Common/MathUtil.h"
 #include "Common/MsgHandler.h"
@@ -83,7 +84,7 @@ void Init()
   GCAdapter::Init();
   VideoBackendBase::ActivateBackend(SConfig::GetInstance().m_strVideoBackend);
 
-  SetEnableAlert(SConfig::GetInstance().bUsePanicHandlers);
+  Common::SetEnableAlert(SConfig::GetInstance().bUsePanicHandlers);
 }
 
 void Shutdown()
@@ -194,7 +195,7 @@ void SetUserDirectory(const std::string& custom_path)
     return;
   }
 
-  std::string user_path = "";
+  std::string user_path;
 #ifdef _WIN32
   // Detect where the User directory is. There are five different cases
   // (on top of the command line flag, which overrides all this):
@@ -253,7 +254,7 @@ void SetUserDirectory(const std::string& custom_path)
     user_path += DIR_SEP;
 
 #else
-  if (File::Exists(ROOT_DIR DIR_SEP USERDATA_DIR))
+  if (File::IsDirectory(ROOT_DIR DIR_SEP USERDATA_DIR))
   {
     user_path = ROOT_DIR DIR_SEP USERDATA_DIR DIR_SEP;
   }
@@ -372,11 +373,11 @@ void EnableScreenSaver(Window win, bool enable)
 void EnableScreenSaver(bool enable)
 #endif
 {
-// Inhibit the screensaver. Depending on the operating system this may also
-// disable low-power states and/or screen dimming.
+  // Inhibit the screensaver. Depending on the operating system this may also
+  // disable low-power states and/or screen dimming.
 
 #if defined(HAVE_X11) && HAVE_X11
-  if (SConfig::GetInstance().bDisableScreenSaver)
+  if (Config::Get(Config::MAIN_DISABLE_SCREENSAVER))
   {
     X11Utils::InhibitScreensaver(win, !enable);
   }
@@ -391,7 +392,7 @@ void EnableScreenSaver(bool enable)
   else
   {
     EXECUTION_STATE should_screen_save =
-        SConfig::GetInstance().bDisableScreenSaver ? ES_DISPLAY_REQUIRED : 0;
+        Config::Get(Config::MAIN_DISABLE_SCREENSAVER) ? ES_DISPLAY_REQUIRED : 0;
     SetThreadExecutionState(ES_CONTINUOUS | should_screen_save | ES_SYSTEM_REQUIRED);
   }
 #endif
@@ -399,7 +400,7 @@ void EnableScreenSaver(bool enable)
 #ifdef __APPLE__
   static IOPMAssertionID s_power_assertion = kIOPMNullAssertionID;
 
-  if (SConfig::GetInstance().bDisableScreenSaver)
+  if (Config::Get(Config::MAIN_DISABLE_SCREENSAVER))
   {
     if (enable)
     {
@@ -439,7 +440,7 @@ std::string FormatSize(u64 bytes)
   const double unit_size = std::pow(2, unit * 10);
   std::stringstream ss;
   ss << std::fixed << std::setprecision(2);
-  ss << bytes / unit_size << ' ' << GetStringT(unit_symbols[unit]);
+  ss << bytes / unit_size << ' ' << Common::GetStringT(unit_symbols[unit]);
   return ss.str();
 }
 

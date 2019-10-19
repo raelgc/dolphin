@@ -15,8 +15,10 @@ MappingDouble::MappingDouble(MappingWidget* parent, ControllerEmu::NumericSettin
   setRange(m_setting.GetMinValue(), m_setting.GetMaxValue());
   setDecimals(2);
 
+  setFixedWidth(WIDGET_MAX_WIDTH);
+
   if (const auto ui_suffix = m_setting.GetUISuffix())
-    setSuffix(QStringLiteral(" ") + tr(ui_suffix));
+    setSuffix(QLatin1Char{' '} + tr(ui_suffix));
 
   if (const auto ui_description = m_setting.GetUIDescription())
     setToolTip(tr(ui_description));
@@ -38,9 +40,8 @@ void MappingDouble::fixup(QString& input) const
 
 void MappingDouble::ConfigChanged()
 {
-  const bool old_state = blockSignals(true);
+  const QSignalBlocker blocker(this);
   setValue(m_setting.GetValue());
-  blockSignals(old_state);
 }
 
 MappingBool::MappingBool(MappingWidget* parent, ControllerEmu::NumericSetting<bool>* setting)
@@ -56,7 +57,6 @@ MappingBool::MappingBool(MappingWidget* parent, ControllerEmu::NumericSetting<bo
 
 void MappingBool::ConfigChanged()
 {
-  const bool old_state = blockSignals(true);
+  const QSignalBlocker blocker(this);
   setChecked(m_setting.GetValue());
-  blockSignals(old_state);
 }

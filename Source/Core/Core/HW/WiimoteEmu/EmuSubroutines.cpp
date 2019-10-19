@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <fstream>
+#include <iterator>
 
 #include "Common/BitUtils.h"
 #include "Common/ChunkFile.h"
@@ -12,6 +13,7 @@
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/Swap.h"
+#include "Core/Analytics.h"
 #include "Core/Core.h"
 #include "Core/HW/WiimoteCommon/WiimoteHid.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
@@ -149,11 +151,17 @@ void Wiimote::SendAck(OutputReportID rpt_id, ErrorCode error_code)
 
 void Wiimote::HandleExtensionSwap()
 {
+  if (WIIMOTE_BALANCE_BOARD == m_index)
+  {
+    // Prevent M+ or anything else silly from being attached to a balance board.
+    // In the future if we support an emulated balance board we can force the BB "extension" here.
+    return;
+  }
+
   ExtensionNumber desired_extension_number =
       static_cast<ExtensionNumber>(m_attachments->GetSelectedAttachment());
 
-  // const bool desired_motion_plus = m_motion_plus_setting->GetValue();
-  const bool desired_motion_plus = false;
+  const bool desired_motion_plus = m_motion_plus_setting.GetValue();
 
   // FYI: AttachExtension also connects devices to the i2c bus
 
@@ -283,7 +291,7 @@ void Wiimote::HandleWriteData(const OutputReportWriteData& wd)
       if (address >= 0x0FCA && address < 0x12C0)
       {
         // TODO: Only write parts of the Mii block.
-        // TODO: Use fifferent files for different wiimote numbers.
+        // TODO: Use different files for different wiimote numbers.
         std::ofstream file;
         File::OpenFStream(file, File::GetUserPath(D_SESSION_WIIROOT_IDX) + "/mii.bin",
                           std::ios::binary | std::ios::out);
@@ -386,7 +394,7 @@ void Wiimote::HandleSpeakerData(const WiimoteCommon::OutputReportSpeakerData& rp
   // (important to keep decoder in proper state)
   if (!m_speaker_mute)
   {
-    if (rpt.length > ArraySize(rpt.data))
+    if (rpt.length > std::size(rpt.data))
     {
       ERROR_LOG(WIIMOTE, "Bad speaker data length: %d", rpt.length);
     }
@@ -501,6 +509,19 @@ bool Wiimote::ProcessReadDataRequest()
       break;
     }
 
+    // It is possible to bypass data reporting and directly read extension input.
+    // While I am not aware of any games that actually do this,
+    // our NetPlay and TAS methods are completely unprepared for it.
+    const bool is_reading_ext = EncryptedExtension::I2C_ADDR == m_read_request.slave_address &&
+                                m_read_request.address < EncryptedExtension::CONTROLLER_DATA_BYTES;
+    const bool is_reading_ir =
+        CameraLogic::I2C_ADDR == m_read_request.slave_address &&
+        m_read_request.address < CameraLogic::REPORT_DATA_OFFSET + CameraLogic::CAMERA_DATA_BYTES &&
+        m_read_request.address + m_read_request.size > CameraLogic::REPORT_DATA_OFFSET;
+
+    if (is_reading_ext || is_reading_ir)
+      DolphinAnalytics::Instance().ReportGameQuirk(GameQuirk::DIRECTLY_READS_WIIMOTE_INPUT);
+
     // Top byte of address is ignored on the bus, but it IS maintained in the read-reply.
     auto const bytes_read = m_i2c_bus.BusRead(
         m_read_request.slave_address, (u8)m_read_request.address, bytes_to_read, reply.data);
@@ -578,12 +599,16 @@ void Wiimote::DoState(PointerWrap& p)
   (m_is_motion_plus_attached ? m_motion_plus.GetExtPort() : m_extension_port)
       .AttachExtension(GetActiveExtension());
 
-  m_motion_plus.DoState(p);
-  GetActiveExtension()->DoState(p);
+  if (m_is_motion_plus_attached)
+    m_motion_plus.DoState(p);
+
+  if (m_active_extension != ExtensionNumber::NONE)
+    GetActiveExtension()->DoState(p);
 
   // Dynamics
   p.Do(m_swing_state);
   p.Do(m_tilt_state);
+  p.Do(m_cursor_state);
   p.Do(m_shake_state);
 
   p.DoMarker("Wiimote");

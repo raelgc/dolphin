@@ -68,9 +68,6 @@ static void BPWritten(const BPCmd& bp)
   ----------------------------------------------------------------------------------------------------------------
   */
 
-  // check for invalid state, else unneeded configuration are built
-  g_video_backend->CheckInvalidState();
-
   if (((s32*)&bpmem)[bp.address] == bp.newvalue)
   {
     if (!(bp.address == BPMEM_TRIGGER_EFB_COPY || bp.address == BPMEM_CLEARBBOX1 ||
@@ -219,7 +216,7 @@ static void BPWritten(const BPCmd& bp)
     u32 destAddr = bpmem.copyTexDest << 5;
     u32 destStride = bpmem.copyMipMapStrideChannels << 5;
 
-    EFBRectangle srcRect;
+    MathUtil::Rectangle<int> srcRect;
     srcRect.left = static_cast<int>(bpmem.copyTexSrcXY.x);
     srcRect.top = static_cast<int>(bpmem.copyTexSrcXY.y);
 
@@ -312,14 +309,13 @@ static void BPWritten(const BPCmd& bp)
       if (g_ActiveConfig.bImmediateXFB)
       {
         // below div two to convert from bytes to pixels - it expects width, not stride
-        g_renderer->Swap(destAddr, destStride / 2, destStride / 2, height, srcRect,
-                         CoreTiming::GetTicks());
+        g_renderer->Swap(destAddr, destStride / 2, destStride, height, CoreTiming::GetTicks());
       }
       else
       {
         if (FifoPlayer::GetInstance().IsRunningWithFakeVideoInterfaceUpdates())
         {
-          VideoInterface::FakeVIUpdate(destAddr, srcRect.GetWidth(), height);
+          VideoInterface::FakeVIUpdate(destAddr, srcRect.GetWidth(), destStride, height);
         }
       }
     }

@@ -37,6 +37,31 @@ std::string VideoBackend::GetDisplayName() const
   return _trans("Direct3D 11");
 }
 
+std::optional<std::string> VideoBackend::GetWarningMessage() const
+{
+  std::optional<std::string> result;
+
+  // If user is on Win7, show a warning about partial DX11.1 support
+  // This is being called BEFORE FillBackendInfo is called for this backend,
+  // so query for logic op support manually
+  bool supportsLogicOp = false;
+  if (D3DCommon::LoadLibraries())
+  {
+    supportsLogicOp = D3D::SupportsLogicOp(g_Config.iAdapter);
+    D3DCommon::UnloadLibraries();
+  }
+
+  if (!supportsLogicOp)
+  {
+    result = _trans("Direct3D 11 renderer requires support for features not supported by your "
+                    "system configuration. This is most likely because you are using Windows 7. "
+                    "You may still use this backend, but you might encounter graphical artifacts."
+                    "\n\nDo you really want to switch to Direct3D 11? If unsure, select 'No'.");
+  }
+
+  return result;
+}
+
 void VideoBackend::InitBackendInfo()
 {
   if (!D3DCommon::LoadLibraries())
@@ -63,16 +88,13 @@ void VideoBackend::FillBackendInfo()
   g_Config.backend_info.bSupportsClipControl = true;
   g_Config.backend_info.bSupportsDepthClamp = true;
   g_Config.backend_info.bSupportsReversedDepthRange = false;
-  g_Config.backend_info.bSupportsLogicOp = true;
   g_Config.backend_info.bSupportsMultithreading = false;
   g_Config.backend_info.bSupportsGPUTextureDecoding = true;
-  g_Config.backend_info.bSupportsST3CTextures = false;
   g_Config.backend_info.bSupportsCopyToVram = true;
   g_Config.backend_info.bSupportsLargePoints = false;
   g_Config.backend_info.bSupportsPartialDepthCopies = false;
   g_Config.backend_info.bSupportsBitfield = false;
   g_Config.backend_info.bSupportsDynamicSamplerIndexing = false;
-  g_Config.backend_info.bSupportsBPTCTextures = false;
   g_Config.backend_info.bSupportsFramebufferFetch = false;
   g_Config.backend_info.bSupportsBackgroundCompiling = true;
   g_Config.backend_info.bSupportsST3CTextures = true;
@@ -82,9 +104,31 @@ void VideoBackend::FillBackendInfo()
   g_Config.backend_info.bSupportsFragmentStoresAndAtomics = true;
   g_Config.backend_info.bSupportsGSInstancing = true;
   g_Config.backend_info.bSupportsSSAA = true;
+  g_Config.backend_info.bSupportsShaderBinaries = true;
+  g_Config.backend_info.bSupportsPipelineCacheData = false;
+  g_Config.backend_info.bSupportsLogicOp = D3D::SupportsLogicOp(g_Config.iAdapter);
 
   g_Config.backend_info.Adapters = D3DCommon::GetAdapterNames();
   g_Config.backend_info.AAModes = D3D::GetAAModes(g_Config.iAdapter);
+
+  // Override optional features if we are actually booting.
+  if (D3D::device)
+  {
+    g_Config.backend_info.bSupportsST3CTextures =
+        D3D::SupportsTextureFormat(DXGI_FORMAT_BC1_UNORM) &&
+        D3D::SupportsTextureFormat(DXGI_FORMAT_BC2_UNORM) &&
+        D3D::SupportsTextureFormat(DXGI_FORMAT_BC3_UNORM);
+    g_Config.backend_info.bSupportsBPTCTextures = D3D::SupportsTextureFormat(DXGI_FORMAT_BC7_UNORM);
+
+    // Features only supported with a FL11.0+ device.
+    const bool shader_model_5_supported = D3D::feature_level >= D3D_FEATURE_LEVEL_11_0;
+    g_Config.backend_info.bSupportsEarlyZ = shader_model_5_supported;
+    g_Config.backend_info.bSupportsBBox = shader_model_5_supported;
+    g_Config.backend_info.bSupportsFragmentStoresAndAtomics = shader_model_5_supported;
+    g_Config.backend_info.bSupportsGSInstancing = shader_model_5_supported;
+    g_Config.backend_info.bSupportsSSAA = shader_model_5_supported;
+    g_Config.backend_info.bSupportsGPUTextureDecoding = shader_model_5_supported;
+  }
 }
 
 bool VideoBackend::Initialize(const WindowSystemInfo& wsi)

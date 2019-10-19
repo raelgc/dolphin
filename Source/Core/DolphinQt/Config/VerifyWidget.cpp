@@ -21,7 +21,7 @@
 
 VerifyWidget::VerifyWidget(std::shared_ptr<DiscIO::Volume> volume) : m_volume(std::move(volume))
 {
-  QVBoxLayout* layout = new QVBoxLayout(this);
+  QVBoxLayout* layout = new QVBoxLayout;
 
   CreateWidgets();
   ConnectWidgets();
@@ -50,10 +50,13 @@ void VerifyWidget::CreateWidgets()
   m_summary_text = new QTextEdit(this);
   m_summary_text->setReadOnly(true);
 
-  m_hash_layout = new QFormLayout(this);
+  m_hash_layout = new QFormLayout;
   std::tie(m_crc32_checkbox, m_crc32_line_edit) = AddHashLine(m_hash_layout, tr("CRC32:"));
   std::tie(m_md5_checkbox, m_md5_line_edit) = AddHashLine(m_hash_layout, tr("MD5:"));
   std::tie(m_sha1_checkbox, m_sha1_line_edit) = AddHashLine(m_hash_layout, tr("SHA-1:"));
+
+  // Extend line edits to their maximum possible widths (needed on macOS)
+  m_hash_layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
   m_verify_button = new QPushButton(tr("Verify Integrity"), this);
 }
@@ -65,7 +68,7 @@ std::pair<QCheckBox*, QLineEdit*> VerifyWidget::AddHashLine(QFormLayout* layout,
   QCheckBox* checkbox = new QCheckBox(tr("Calculate"), this);
   checkbox->setChecked(true);
 
-  QHBoxLayout* hbox_layout = new QHBoxLayout(this);
+  QHBoxLayout* hbox_layout = new QHBoxLayout;
   hbox_layout->addWidget(line_edit);
   hbox_layout->addWidget(checkbox);
 
@@ -95,18 +98,18 @@ void VerifyWidget::Verify()
   // We have to divide the number of processed bytes with something so it won't make ints overflow
   constexpr int DIVISOR = 0x100;
 
-  QProgressDialog* progress = new QProgressDialog(tr("Verifying"), tr("Cancel"), 0,
-                                                  verifier.GetTotalBytes() / DIVISOR, this);
-  progress->setWindowTitle(tr("Verifying"));
-  progress->setWindowFlags(progress->windowFlags() & ~Qt::WindowContextHelpButtonHint);
-  progress->setMinimumDuration(500);
-  progress->setWindowModality(Qt::WindowModal);
+  QProgressDialog progress(tr("Verifying"), tr("Cancel"), 0, verifier.GetTotalBytes() / DIVISOR,
+                           this);
+  progress.setWindowTitle(tr("Verifying"));
+  progress.setWindowFlags(progress.windowFlags() & ~Qt::WindowContextHelpButtonHint);
+  progress.setMinimumDuration(500);
+  progress.setWindowModality(Qt::WindowModal);
 
   verifier.Start();
   while (verifier.GetBytesProcessed() != verifier.GetTotalBytes())
   {
-    progress->setValue(verifier.GetBytesProcessed() / DIVISOR);
-    if (progress->wasCanceled())
+    progress.setValue(verifier.GetBytesProcessed() / DIVISOR);
+    if (progress.wasCanceled())
       return;
 
     verifier.Process();
@@ -114,7 +117,7 @@ void VerifyWidget::Verify()
   verifier.Finish();
 
   DiscIO::VolumeVerifier::Result result = verifier.GetResult();
-  progress->setValue(verifier.GetBytesProcessed() / DIVISOR);
+  progress.setValue(verifier.GetBytesProcessed() / DIVISOR);
 
   m_summary_text->setText(QString::fromStdString(result.summary_text));
 

@@ -72,7 +72,16 @@ static void WriteHeader(char*& p, APIType ApiType)
     WRITE(p, "  float2 clamp_tb;\n");
     WRITE(p, "  float3 filter_coefficients;\n");
     WRITE(p, "};\n");
-    WRITE(p, "VARYING_LOCATION(0) in float3 v_tex0;\n");
+    if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
+    {
+      WRITE(p, "VARYING_LOCATION(0) in VertexData {\n");
+      WRITE(p, "  float3 v_tex0;\n");
+      WRITE(p, "};\n");
+    }
+    else
+    {
+      WRITE(p, "VARYING_LOCATION(0) in float3 v_tex0;\n");
+    }
     WRITE(p, "SAMPLER_BINDING(0) uniform sampler2DArray samp0;\n");
     WRITE(p, "FRAGMENT_OUTPUT_LOCATION(0) out float4 ocol0;\n");
   }
@@ -815,13 +824,13 @@ const char* GenerateEncodingShader(const EFBCopyParams& params, APIType api_type
     if (params.depth)
       WriteZ16Encoder(p, api_type, params);  // Z16H
     else
-      WriteCC8Encoder(p, "rg", api_type, params);
+      WriteCC8Encoder(p, "gr", api_type, params);
     break;
   case EFBCopyFormat::GB8:
     if (params.depth)
       WriteZ16LEncoder(p, api_type, params);  // Z16L
     else
-      WriteCC8Encoder(p, "gb", api_type, params);
+      WriteCC8Encoder(p, "bg", api_type, params);
     break;
   case EFBCopyFormat::XFB:
     WriteXFBEncoder(p, api_type, params);
@@ -1510,7 +1519,16 @@ float4 DecodePixel(int val)
   }
   else
   {
-    ss << "VARYING_LOCATION(0) in float3 v_tex0;\n";
+    if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
+    {
+      ss << "VARYING_LOCATION(0) in VertexData {\n";
+      ss << "  float3 v_tex0;\n";
+      ss << "};\n";
+    }
+    else
+    {
+      ss << "VARYING_LOCATION(0) in float3 v_tex0;\n";
+    }
     ss << "FRAGMENT_OUTPUT_LOCATION(0) out float4 ocol0;\n";
     ss << "void main() {\n";
     ss << "  float3 coords = v_tex0;\n";

@@ -33,6 +33,14 @@ bool IsSettingSaveable(const Config::ConfigLocation& config_location)
       Config::MAIN_MEMCARD_B_PATH.location,
       Config::MAIN_AUTO_DISC_CHANGE.location,
 
+      // Main.Display
+      Config::MAIN_FULLSCREEN_DISPLAY_RES.location,
+      Config::MAIN_FULLSCREEN.location,
+      Config::MAIN_RENDER_TO_MAIN.location,
+      Config::MAIN_RENDER_WINDOW_AUTOSIZE.location,
+      Config::MAIN_KEEP_WINDOW_ON_TOP.location,
+      Config::MAIN_DISABLE_SCREENSAVER.location,
+
       // Graphics.Hardware
 
       Config::GFX_VSYNC.location,
@@ -82,6 +90,7 @@ bool IsSettingSaveable(const Config::ConfigLocation& config_location)
       Config::GFX_SHADER_COMPILATION_MODE.location,
       Config::GFX_SHADER_COMPILER_THREADS.location,
       Config::GFX_SHADER_PRECOMPILER_THREADS.location,
+      Config::GFX_SAVE_TEXTURE_CACHE_TO_STATE.location,
 
       Config::GFX_SW_ZCOMPLOC.location,
       Config::GFX_SW_ZFREEZE.location,

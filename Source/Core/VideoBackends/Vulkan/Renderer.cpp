@@ -95,9 +95,9 @@ std::unique_ptr<AbstractStagingTexture> Renderer::CreateStagingTexture(StagingTe
 }
 
 std::unique_ptr<AbstractShader> Renderer::CreateShaderFromSource(ShaderStage stage,
-                                                                 const char* source, size_t length)
+                                                                 std::string_view source)
 {
-  return VKShader::CreateFromSource(stage, source, length);
+  return VKShader::CreateFromSource(stage, source);
 }
 
 std::unique_ptr<AbstractShader> Renderer::CreateShaderFromBinary(ShaderStage stage,
@@ -112,7 +112,9 @@ Renderer::CreateNativeVertexFormat(const PortableVertexDeclaration& vtx_decl)
   return std::make_unique<VertexFormat>(vtx_decl);
 }
 
-std::unique_ptr<AbstractPipeline> Renderer::CreatePipeline(const AbstractPipelineConfig& config)
+std::unique_ptr<AbstractPipeline> Renderer::CreatePipeline(const AbstractPipelineConfig& config,
+                                                           const void* cache_data,
+                                                           size_t cache_data_length)
 {
   return VKPipeline::Create(config);
 }
@@ -145,14 +147,14 @@ void Renderer::BBoxFlush()
   m_bounding_box->Invalidate();
 }
 
-void Renderer::ClearScreen(const EFBRectangle& rc, bool color_enable, bool alpha_enable,
+void Renderer::ClearScreen(const MathUtil::Rectangle<int>& rc, bool color_enable, bool alpha_enable,
                            bool z_enable, u32 color, u32 z)
 {
   g_framebuffer_manager->FlushEFBPokes();
   g_framebuffer_manager->FlagPeekCacheAsOutOfDate();
 
   // Native -> EFB coordinates
-  TargetRectangle target_rc = Renderer::ConvertEFBRectangle(rc);
+  MathUtil::Rectangle<int> target_rc = Renderer::ConvertEFBRectangle(rc);
 
   // Size we pass this size to vkBeginRenderPass, it has to be clamped to the framebuffer
   // dimensions. The other backends just silently ignore this case.
@@ -559,6 +561,19 @@ void Renderer::SetScissorRect(const MathUtil::Rectangle<int>& rc)
 {
   VkRect2D scissor = {{rc.left, rc.top},
                       {static_cast<u32>(rc.GetWidth()), static_cast<u32>(rc.GetHeight())}};
+
+  // See Vulkan spec for vkCmdSetScissor:
+  // The x and y members of offset must be greater than or equal to 0.
+  if (scissor.offset.x < 0)
+  {
+    scissor.extent.width -= -scissor.offset.x;
+    scissor.offset.x = 0;
+  }
+  if (scissor.offset.y < 0)
+  {
+    scissor.extent.height -= -scissor.offset.y;
+    scissor.offset.y = 0;
+  }
   StateTracker::GetInstance()->SetScissor(scissor);
 }
 

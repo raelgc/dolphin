@@ -13,6 +13,7 @@
 #include "VideoBackends/Null/VertexManager.h"
 #include "VideoBackends/Null/VideoBackend.h"
 
+#include "Common/Common.h"
 #include "Common/MsgHandler.h"
 
 #include "VideoCommon/FramebufferManager.h"
@@ -52,6 +53,8 @@ void VideoBackend::InitBackendInfo()
   g_Config.backend_info.bSupportsLogicOp = false;
   g_Config.backend_info.bSupportsLargePoints = false;
   g_Config.backend_info.bSupportsPartialDepthCopies = false;
+  g_Config.backend_info.bSupportsShaderBinaries = false;
+  g_Config.backend_info.bSupportsPipelineCacheData = false;
 
   // aamodes: We only support 1 sample, so no MSAA
   g_Config.backend_info.Adapters.clear();
@@ -94,5 +97,11 @@ void VideoBackend::Shutdown()
   g_renderer.reset();
 
   ShutdownShared();
+}
+
+std::string VideoBackend::GetDisplayName() const
+{
+  // i18n: Null is referring to the null video backend, which renders nothing
+  return _trans("Null");
 }
 }  // namespace Null

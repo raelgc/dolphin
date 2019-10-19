@@ -646,6 +646,15 @@ void Jit64::WriteRfiExitDestInRSCRATCH()
   JMP(asm_routines.dispatcher, true);
 }
 
+void Jit64::WriteIdleExit(u32 destination)
+{
+  ABI_PushRegistersAndAdjustStack({}, 0);
+  ABI_CallFunction(CoreTiming::Idle);
+  ABI_PopRegistersAndAdjustStack({}, 0);
+  MOV(32, PPCSTATE(pc), Imm32(destination));
+  WriteExceptionExit();
+}
+
 void Jit64::WriteExceptionExit()
 {
   Cleanup();
@@ -697,7 +706,7 @@ void Jit64::Trace()
 #ifdef JIT_LOG_FPR
   for (int i = 0; i < 32; i++)
   {
-    fregs += StringFromFormat("f%02d: %016x ", i, riPS0(i));
+    fregs += StringFromFormat("f%02d: %016x ", i, rPS(i).PS0AsU64());
   }
 #endif
 

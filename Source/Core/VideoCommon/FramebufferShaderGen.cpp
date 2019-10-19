@@ -1,6 +1,7 @@
 #include "VideoCommon/FramebufferShaderGen.h"
 #include <sstream>
 #include "VideoCommon/FramebufferManager.h"
+#include "VideoCommon/TextureDecoder.h"
 #include "VideoCommon/VertexShaderGen.h"
 
 namespace FramebufferShaderGen
@@ -68,6 +69,26 @@ static void EmitSampleTexture(std::stringstream& ss, u32 n, const char* coords)
   }
 }
 
+// Emits a texel fetch/load instruction. Assumes that "coords" is a 4-element vector, with z
+// containing the layer, and w containing the mipmap level.
+static void EmitTextureLoad(std::stringstream& ss, u32 n, const char* coords)
+{
+  switch (GetAPIType())
+  {
+  case APIType::D3D:
+    ss << "tex" << n << ".Load(" << coords << ")";
+    break;
+
+  case APIType::OpenGL:
+  case APIType::Vulkan:
+    ss << "texelFetch(samp" << n << ", (" << coords << ").xyz, (" << coords << ").w)";
+    break;
+
+  default:
+    break;
+  }
+}
+
 static void EmitVertexMainDeclaration(std::stringstream& ss, u32 num_tex_inputs,
                                       u32 num_color_inputs, bool position_input,
                                       u32 num_tex_outputs, u32 num_color_outputs,
@@ -104,10 +125,23 @@ static void EmitVertexMainDeclaration(std::stringstream& ss, u32 num_tex_inputs,
          << ";\n";
     if (position_input)
       ss << "ATTRIBUTE_LOCATION(" << SHADER_POSITION_ATTRIB << ") in float4 rawpos;\n";
-    for (u32 i = 0; i < num_tex_outputs; i++)
-      ss << "VARYING_LOCATION(" << i << ") out float3 v_tex" << i << ";\n";
-    for (u32 i = 0; i < num_color_outputs; i++)
-      ss << "VARYING_LOCATION(" << (num_tex_inputs + i) << ") out float4 v_col" << i << ";\n";
+
+    if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
+    {
+      ss << "VARYING_LOCATION(0) out VertexData {\n";
+      for (u32 i = 0; i < num_tex_outputs; i++)
+        ss << "  float3 v_tex" << i << ";\n";
+      for (u32 i = 0; i < num_color_outputs; i++)
+        ss << "  float4 v_col" << i << ";\n";
+      ss << "};\n";
+    }
+    else
+    {
+      for (u32 i = 0; i < num_tex_outputs; i++)
+        ss << "VARYING_LOCATION(" << i << ") out float3 v_tex" << i << ";\n";
+      for (u32 i = 0; i < num_color_outputs; i++)
+        ss << "VARYING_LOCATION(" << (num_tex_inputs + i) << ") out float4 v_col" << i << ";\n";
+    }
     ss << "#define opos gl_Position\n";
     ss << extra_inputs << "\n";
     ss << "void main()\n";
@@ -120,7 +154,7 @@ static void EmitVertexMainDeclaration(std::stringstream& ss, u32 num_tex_inputs,
 
 static void EmitPixelMainDeclaration(std::stringstream& ss, u32 num_tex_inputs,
                                      u32 num_color_inputs, const char* output_type = "float4",
-                                     const char* extra_vars = "")
+                                     const char* extra_vars = "", bool emit_frag_coord = false)
 {
   switch (GetAPIType())
   {
@@ -131,6 +165,8 @@ static void EmitPixelMainDeclaration(std::stringstream& ss, u32 num_tex_inputs,
       ss << "in float3 v_tex" << i << " : TEXCOORD" << i << ", ";
     for (u32 i = 0; i < num_color_inputs; i++)
       ss << "in float4 v_col" << i << " : COLOR" << i << ", ";
+    if (emit_frag_coord)
+      ss << "in float4 frag_coord : SV_Position, ";
     ss << extra_vars << "out " << output_type << " ocol0 : SV_Target)\n";
   }
   break;
@@ -138,12 +174,27 @@ static void EmitPixelMainDeclaration(std::stringstream& ss, u32 num_tex_inputs,
   case APIType::OpenGL:
   case APIType::Vulkan:
   {
-    for (u32 i = 0; i < num_tex_inputs; i++)
-      ss << "VARYING_LOCATION(" << i << ") in float3 v_tex" << i << ";\n";
-    for (u32 i = 0; i < num_color_inputs; i++)
-      ss << "VARYING_LOCATION(" << (num_tex_inputs + i) << ") in float4 v_col" << i << ";\n";
+    if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
+    {
+      ss << "VARYING_LOCATION(0) in VertexData {\n";
+      for (u32 i = 0; i < num_tex_inputs; i++)
+        ss << "  in float3 v_tex" << i << ";\n";
+      for (u32 i = 0; i < num_color_inputs; i++)
+        ss << "  in float4 v_col" << i << ";\n";
+      ss << "};\n";
+    }
+    else
+    {
+      for (u32 i = 0; i < num_tex_inputs; i++)
+        ss << "VARYING_LOCATION(" << i << ") in float3 v_tex" << i << ";\n";
+      for (u32 i = 0; i < num_color_inputs; i++)
+        ss << "VARYING_LOCATION(" << (num_tex_inputs + i) << ") in float4 v_col" << i << ";\n";
+    }
+
     ss << "FRAGMENT_OUTPUT_LOCATION(0) out " << output_type << " ocol0;\n";
     ss << extra_vars << "\n";
+    if (emit_frag_coord)
+      ss << "#define frag_coord gl_FragCoord\n";
     ss << "void main()\n";
   }
   break;
@@ -218,15 +269,20 @@ std::string GeneratePassthroughGeometryShader(u32 num_tex, u32 num_colors)
   {
     ss << "layout(triangles) in;\n";
     ss << "layout(triangle_strip, max_vertices = 6) out;\n";
-    for (u32 i = 0; i < num_tex; i++)
+    if (num_tex > 0 || num_colors > 0)
     {
-      ss << "layout(location = " << i << ") in float3 v_tex" << i << "[];\n";
-      ss << "layout(location = " << i << ") out float3 out_tex" << i << ";\n";
-    }
-    for (u32 i = 0; i < num_colors; i++)
-    {
-      ss << "layout(location = " << (num_tex + i) << ") in float4 v_col" << i << "[];\n";
-      ss << "layout(location = " << (num_tex + i) << ") out float4 out_col" << i << ";\n";
+      ss << "VARYING_LOCATION(0) in VertexData {\n";
+      for (u32 i = 0; i < num_tex; i++)
+        ss << "  float3 v_tex" << i << ";\n";
+      for (u32 i = 0; i < num_colors; i++)
+        ss << "  float4 v_col" << i << ";\n";
+      ss << "} v_in[];\n";
+      ss << "VARYING_LOCATION(0) out VertexData {\n";
+      for (u32 i = 0; i < num_tex; i++)
+        ss << "  float3 v_tex" << i << ";\n";
+      for (u32 i = 0; i < num_colors; i++)
+        ss << "  float4 v_col" << i << ";\n";
+      ss << "} v_out;\n";
     }
     ss << "\n";
     ss << "void main()\n";
@@ -240,9 +296,10 @@ std::string GeneratePassthroughGeometryShader(u32 num_tex, u32 num_colors)
     {
       ss << "    gl_Position = gl_in[" << v << "].gl_Position;\n";
       for (u32 i = 0; i < num_tex; i++)
-        ss << "    out_tex" << i << " = float3(v_tex" << i << "[" << v << "].xy, float(j));\n";
+        ss << "    v_out.v_tex" << i << " = float3(v_in[" << v << "].v_tex" << i
+           << ".xy, float(j));\n";
       for (u32 i = 0; i < num_colors; i++)
-        ss << "    out_col" << i << " = v_col" << i << "[" << v << "];\n";
+        ss << "    v_out.v_col" << i << " = v_in[" << v << "].v_col" << i << ";\n";
       ss << "    EmitVertex();\n\n";
     }
     ss << "    EndPrimitive();\n";
@@ -378,10 +435,13 @@ std::string GenerateFormatConversionShader(EFBReinterpretType convtype, u32 samp
 {
   std::stringstream ss;
   EmitSamplerDeclarations(ss, 0, 1, samples > 1);
-  EmitPixelMainDeclaration(ss, 1, 0, "float4",
-                           GetAPIType() == APIType::D3D ?
-                               "in float4 ipos : SV_Position, in uint isample : SV_SampleIndex, " :
-                               "");
+  EmitPixelMainDeclaration(
+      ss, 1, 0, "float4",
+      GetAPIType() == APIType::D3D ?
+          (g_ActiveConfig.bSSAA ?
+               "in float4 ipos : SV_Position, in uint isample : SV_SampleIndex, " :
+               "in float4 ipos : SV_Position, ") :
+          "");
   ss << "{\n";
   ss << "  int layer = int(v_tex0.z);\n";
   if (GetAPIType() == APIType::D3D)
@@ -457,6 +517,146 @@ std::string GenerateFormatConversionShader(EFBReinterpretType convtype, u32 samp
     break;
   }
 
+  ss << "}\n";
+  return ss.str();
+}
+
+std::string GenerateTextureReinterpretShader(TextureFormat from_format, TextureFormat to_format)
+{
+  std::stringstream ss;
+  EmitSamplerDeclarations(ss, 0, 1, false);
+  EmitPixelMainDeclaration(ss, 1, 0, "float4", "", true);
+  ss << "{\n";
+  ss << "  int layer = int(v_tex0.z);\n";
+  ss << "  int4 coords = int4(int2(frag_coord.xy), layer, 0);\n";
+
+  // Convert to a 32-bit value encompassing all channels, filling the most significant bits with
+  // zeroes.
+  ss << "  uint raw_value;\n";
+  switch (from_format)
+  {
+  case TextureFormat::I8:
+  case TextureFormat::C8:
+  {
+    ss << "  float4 temp_value = ";
+    EmitTextureLoad(ss, 0, "coords");
+    ss << ";\n";
+    ss << "  raw_value = uint(temp_value.r * 255.0);\n";
+  }
+  break;
+
+  case TextureFormat::IA8:
+  {
+    ss << "  float4 temp_value = ";
+    EmitTextureLoad(ss, 0, "coords");
+    ss << ";\n";
+    ss << "  raw_value = uint(temp_value.r * 255.0) | (uint(temp_value.a * 255.0) << 8);\n";
+  }
+  break;
+
+  case TextureFormat::IA4:
+  {
+    ss << "  float4 temp_value = ";
+    EmitTextureLoad(ss, 0, "coords");
+    ss << ";\n";
+    ss << "  raw_value = uint(temp_value.r * 15.0) | (uint(temp_value.a * 15.0) << 4);\n";
+  }
+  break;
+
+  case TextureFormat::RGB565:
+  {
+    ss << "  float4 temp_value = ";
+    EmitTextureLoad(ss, 0, "coords");
+    ss << ";\n";
+    ss << "  raw_value = uint(temp_value.b * 31.0) | (uint(temp_value.g * 63.0) << 5) |\n";
+    ss << "              (uint(temp_value.r * 31.0) << 11);\n";
+  }
+  break;
+
+  case TextureFormat::RGB5A3:
+  {
+    ss << "  float4 temp_value = ";
+    EmitTextureLoad(ss, 0, "coords");
+    ss << ";\n";
+
+    // 0.8784 = 224 / 255 which is the maximum alpha value that can be represented in 3 bits
+    ss << "  if (temp_value.a > 0.878f) {\n";
+    ss << "    raw_value = (uint(temp_value.b * 31.0)) | (uint(temp_value.g * 31.0) << 5) |\n";
+    ss << "                (uint(temp_value.r * 31.0) << 10) | 0x8000u;\n";
+    ss << "  } else {\n";
+    ss << "     raw_value = (uint(temp_value.b * 15.0)) | (uint(temp_value.g * 15.0) << 4) |\n";
+    ss << "                 (uint(temp_value.r * 15.0) << 8) | (uint(temp_value.a * 7.0) << 12);\n";
+    ss << "  }\n";
+  }
+  break;
+  }
+
+  // Now convert it to its new representation.
+  switch (to_format)
+  {
+  case TextureFormat::I8:
+  case TextureFormat::C8:
+  {
+    ss << "  float orgba = float(raw_value & 0xFFu) / 255.0;\n";
+    ss << "  ocol0 = float4(orgba, orgba, orgba, orgba);\n";
+  }
+  break;
+
+  case TextureFormat::IA8:
+  {
+    ss << "  float orgb = float(raw_value & 0xFFu) / 255.0;\n";
+    ss << "  ocol0 = float4(orgb, orgb, orgb, float((raw_value >> 8) & 0xFFu) / 255.0);\n";
+  }
+  break;
+
+  case TextureFormat::IA4:
+  {
+    ss << "  float orgb = float(raw_value & 0xFu) / 15.0;\n";
+    ss << "  ocol0 = float4(orgb, orgb, orgb, float((raw_value >> 4) & 0xFu) / 15.0);\n";
+  }
+  break;
+
+  case TextureFormat::RGB565:
+  {
+    ss << "  ocol0 = float4(float((raw_value >> 10) & 0x1Fu) / 31.0,\n";
+    ss << "                 float((raw_value >> 5) & 0x1Fu) / 31.0,\n";
+    ss << "                 float(raw_value & 0x1Fu) / 31.0, 1.0);\n";
+  }
+  break;
+
+  case TextureFormat::RGB5A3:
+  {
+    ss << "  if ((raw_value & 0x8000u) != 0u) {\n";
+    ss << "    ocol0 = float4(float((raw_value >> 10) & 0x1Fu) / 31.0,\n";
+    ss << "                   float((raw_value >> 5) & 0x1Fu) / 31.0,\n";
+    ss << "                   float(raw_value & 0x1Fu) / 31.0, 1.0);\n";
+    ss << "  } else {\n";
+    ss << "    ocol0 = float4(float((raw_value >> 8) & 0x0Fu) / 15.0,\n";
+    ss << "                   float((raw_value >> 4) & 0x0Fu) / 15.0,\n";
+    ss << "                   float(raw_value & 0x0Fu) / 15.0,\n";
+    ss << "                   float((raw_value >> 12) & 0x07u) / 7.0);\n";
+    ss << "  }\n";
+  }
+  break;
+  }
+
+  ss << "}\n";
+  return ss.str();
+}
+
+std::string GenerateEFBRestorePixelShader()
+{
+  std::stringstream ss;
+  EmitSamplerDeclarations(ss, 0, 2, false);
+  EmitPixelMainDeclaration(ss, 1, 0, "float4",
+                           GetAPIType() == APIType::D3D ? "out float depth : SV_Depth, " : "");
+  ss << "{\n";
+  ss << "  ocol0 = ";
+  EmitSampleTexture(ss, 0, "v_tex0");
+  ss << ";\n";
+  ss << "  " << (GetAPIType() == APIType::D3D ? "depth" : "gl_FragDepth") << " = ";
+  EmitSampleTexture(ss, 1, "v_tex0");
+  ss << ".r;\n";
   ss << "}\n";
   return ss.str();
 }
