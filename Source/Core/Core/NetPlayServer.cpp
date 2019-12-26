@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <fmt/format.h>
 #include <lzo/lzo1x.h>
 
 #include "Common/CommonPaths.h"
@@ -168,8 +169,11 @@ static void ClearPeerPlayerId(ENetPeer* peer)
 
 void NetPlayServer::SetupIndex()
 {
-  if (!Config::Get(Config::NETPLAY_USE_INDEX))
+  if (!Config::Get(Config::NETPLAY_USE_INDEX) || Config::Get(Config::NETPLAY_INDEX_NAME).empty() ||
+      Config::Get(Config::NETPLAY_INDEX_REGION).empty())
+  {
     return;
+  }
 
   NetPlaySession session;
 
@@ -1064,8 +1068,8 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
 
     case SYNC_SAVE_DATA_FAILURE:
     {
-      m_dialog->AppendChat(StringFromFormat(Common::GetStringT("%s failed to synchronize.").c_str(),
-                                            player.name.c_str()));
+      m_dialog->AppendChat(
+          fmt::format(Common::GetStringT("{} failed to synchronize."), player.name));
       m_dialog->OnGameStartAborted();
       ChunkedDataAbort();
       m_start_pending = false;
@@ -1108,8 +1112,8 @@ unsigned int NetPlayServer::OnData(sf::Packet& packet, Client& player)
 
     case SYNC_CODES_FAILURE:
     {
-      m_dialog->AppendChat(StringFromFormat(
-          Common::GetStringT("%s failed to synchronize codes.").c_str(), player.name.c_str()));
+      m_dialog->AppendChat(
+          fmt::format(Common::GetStringT("{} failed to synchronize codes."), player.name));
       m_dialog->OnGameStartAborted();
       m_start_pending = false;
     }
@@ -1455,15 +1459,14 @@ bool NetPlayServer::SyncSaveData()
         pac << sf::Uint64{0};
       }
 
-      SendChunkedToClients(
-          std::move(pac), 1,
-          StringFromFormat("Memory Card %c Synchronization", is_slot_a ? 'A' : 'B'));
+      SendChunkedToClients(std::move(pac), 1,
+                           fmt::format("Memory Card {} Synchronization", is_slot_a ? 'A' : 'B'));
     }
     else if (SConfig::GetInstance().m_EXIDevice[i] ==
              ExpansionInterface::EXIDEVICE_MEMORYCARDFOLDER)
     {
       const std::string path = File::GetUserPath(D_GCUSER_IDX) + region + DIR_SEP +
-                               StringFromFormat("Card %c", is_slot_a ? 'A' : 'B');
+                               fmt::format("Card {}", is_slot_a ? 'A' : 'B');
 
       sf::Packet pac;
       pac << static_cast<MessageId>(NP_MSG_SYNC_SAVE_DATA);
@@ -1489,9 +1492,8 @@ bool NetPlayServer::SyncSaveData()
         pac << static_cast<u8>(0);
       }
 
-      SendChunkedToClients(
-          std::move(pac), 1,
-          StringFromFormat("GCI Folder %c Synchronization", is_slot_a ? 'A' : 'B'));
+      SendChunkedToClients(std::move(pac), 1,
+                           fmt::format("GCI Folder {} Synchronization", is_slot_a ? 'A' : 'B'));
     }
   }
 

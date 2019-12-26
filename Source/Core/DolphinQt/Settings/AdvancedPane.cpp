@@ -40,8 +40,6 @@ AdvancedPane::AdvancedPane(QWidget* parent) : QWidget(parent)
   ConnectLayout();
 
   connect(&Settings::Instance(), &Settings::EmulationStateChanged, this, &AdvancedPane::Update);
-  connect(&Settings::Instance(), &Settings::EmulationStateChanged, this,
-          &AdvancedPane::OnEmulationStateChanged);
 }
 
 void AdvancedPane::CreateLayout()
@@ -64,6 +62,9 @@ void AdvancedPane::CreateLayout()
   cpu_emulation_layout->addWidget(cpu_emulation_engine_label, 0, 0);
   cpu_emulation_layout->addWidget(m_cpu_emulation_engine_combobox, 0, 1, Qt::AlignLeft);
   cpu_options_layout->addLayout(cpu_emulation_layout);
+
+  m_enable_mmu_checkbox = new QCheckBox(tr("Enable MMU"));
+  cpu_options_layout->addWidget(m_enable_mmu_checkbox);
 
   auto* clock_override = new QGroupBox(tr("Clock Override"));
   auto* clock_override_layout = new QVBoxLayout();
@@ -134,8 +135,10 @@ void AdvancedPane::ConnectLayout()
           [this](int index) {
             SConfig::GetInstance().cpu_core = PowerPC::AvailableCPUCores()[index];
             Config::SetBaseOrCurrent(Config::MAIN_CPU_CORE, PowerPC::AvailableCPUCores()[index]);
-            Update();
           });
+
+  connect(m_enable_mmu_checkbox, &QCheckBox::toggled, this,
+          [this](bool checked) { SConfig::GetInstance().bMMU = checked; });
 
   m_cpu_clock_override_checkbox->setChecked(SConfig::GetInstance().m_OCEnable);
   connect(m_cpu_clock_override_checkbox, &QCheckBox::toggled, [this](bool enable_clock_override) {
@@ -179,6 +182,10 @@ void AdvancedPane::Update()
     if (available_cpu_cores[i] == SConfig::GetInstance().cpu_core)
       m_cpu_emulation_engine_combobox->setCurrentIndex(i);
   }
+  m_cpu_emulation_engine_combobox->setEnabled(!running);
+
+  m_enable_mmu_checkbox->setChecked(SConfig::GetInstance().bMMU);
+  m_enable_mmu_checkbox->setEnabled(!running);
 
   QFont bf = font();
   bf.setBold(Config::GetActiveLayerForConfig(Config::MAIN_OVERCLOCK_ENABLE) !=
@@ -204,10 +211,4 @@ void AdvancedPane::Update()
 
   m_custom_rtc_checkbox->setEnabled(!running);
   m_custom_rtc_datetime->setEnabled(enable_custom_rtc_widgets);
-}
-
-void AdvancedPane::OnEmulationStateChanged(Core::State state)
-{
-  const bool running = state != Core::State::Uninitialized;
-  m_cpu_emulation_engine_combobox->setEnabled(!running);
 }

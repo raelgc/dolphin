@@ -707,6 +707,9 @@
     <ClCompile Include="IOS\DeviceStub.cpp">
       <Filter>IOS</Filter>
     </ClCompile>
+    <ClCompile Include="IOS\DolphinDevice.cpp">
+      <Filter>IOS</Filter>
+    </ClCompile>
     <ClCompile Include="IOS\DI\DI.cpp">
       <Filter>IOS\DI</Filter>
     </ClCompile>
@@ -932,6 +935,7 @@
     <ClCompile Include="HW\AddressSpace.cpp">
       <Filter>HW %28Flipper/Hollywood%29</Filter>
     </ClCompile>
+    <ClCompile Include="PowerPC\ConditionRegister.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BootManager.h" />
@@ -1433,6 +1437,9 @@
       <Filter>IOS\USB\Bluetooth</Filter>
     </ClInclude>
     <ClInclude Include="IOS\DeviceStub.h">
+      <Filter>IOS</Filter>
+    </ClInclude>
+    <ClInclude Include="IOS\DolphinDevice.h">
       <Filter>IOS</Filter>
     </ClInclude>
     <ClInclude Include="IOS\DI\DI.h">
